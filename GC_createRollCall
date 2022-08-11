@@ -1,0 +1,186 @@
+//  ------- Use UI to set the course, process and how much minute is the deadline time after the process starts.  ------  //
+
+function createRollCall(topicNameInput) {
+
+  //  Use UI to choose the course and set 'PUBLISHED or DRAFT' , 'process', and how much minute are the deadline time after the process starts.
+  var rText = settingUiRC();    //  rText = [ 課程的編號， 公開或草稿， 第幾節， 打鐘後幾分鐘， courseId]
+
+    if ( rText == null ){
+      return false;}
+  try{
+  Logger.log('rText = %s', rText);
+  var courseId = rText[4];
+
+  var options = {
+        "assigneeMode": 'ALL_STUDENTS',
+        "workType": 'ASSIGNMENT',
+        "submissionModificationMode": 'MODIFIABLE_UNTIL_TURNED_IN',
+        "maxPoints": 100,
+  }; 
+
+//  [process1 start, process1 end, process2 start, process2 end, ... etc.]
+  var processTemp = [
+      '08:25:00','09:10:00',
+      '09:15:00','10:00:00',
+      '10:20:00','11:05:00',
+      '11:10:00','11:55:00',
+      '13:00:00','13:45:00',
+      '13:50:00','14:35:00',
+      '15:00:00','15:45:00',
+      '15:50:00','16:35:00',
+      '16:45:00','18:05:00',
+      '18:50:00','20:10:00'
+  ];
+
+    var shift = parseInt( rText[3] ) *60*1000;  // 上課後幾分鐘，轉成毫秒
+    Logger.log('rText = %s, type: %s, %s, %s', rText, typeof(rText[0]), typeof(rText[1]), typeof(rText[2]), typeof(rText[3]));
+
+    var now = new Date(); 
+    var nowYear = now.getFullYear();
+    var nowMonthX = now.getMonth() +1;
+    var nowDateX = now.getDate();
+
+    //  補零
+    if ( nowMonthX.toString().length == 1 ){ var nowMonth = '0' + nowMonthX; } else{ var nowMonth = nowMonthX.toString(); }
+    if ( nowDateX.toString().length == 1 ){ var nowDate = '0' + nowDateX; } else{ var nowDate = nowDateX.toString(); }
+
+    var onClassTime = processTemp[ parseInt( rText[2] ) *2 -2 ];
+    var processTime = nowYear + '-' + nowMonth + '-' +nowDate + 'T' + onClassTime;
+
+    var timeSet = new Date(Date.parse(processTime) + shift - 8*60*60*1000);     //  8hrs shift for Taiwan's situations.
+    var yearX = timeSet.getFullYear();
+    var monthX = timeSet.getMonth() +1;
+    var dateX = timeSet.getDate();
+    var hoursX = timeSet.getHours();
+    var minutesX = timeSet.getMinutes();
+
+    options.dueDate = { 
+      "year": yearX,
+      "month": monthX,
+      "day": dateX
+    };
+    options.dueTime = {
+      "hours": hoursX,
+      "minutes": minutesX
+    }
+
+    var title = nowMonth.toString() + '/' + nowDate.toString() + ' 點名';
+    options.title = title;
+
+    if ( rText[1] == '1' ){
+      options.state = 'PUBLISHED';
+    }
+    else if ( rText[1] == '2'){
+      options.state = 'DRAFT';
+    }
+
+      //  確認課程內的 topic      
+      var topicsTemp = Classroom.Courses.Topics.list( courseId );
+      var topics = topicsTemp.topic;
+      var topicArr = [];
+
+      if ( topicNameInput != ''){
+        if ( topics ){
+
+          for ( var j = 0; j < topics.length; j++){
+            var topicName = topics[j].name;
+            var topicId = topics[j].topicId;
+            topicArr[j] = [topicName, topicId];
+          }
+          // Logger.log('topicsArr = %s', topicArr);
+
+          for ( var k = 0; k < topicArr.length; k++){                   //  如果有對到主題就補上
+            if ( topicNameInput == topicArr[k][0] ){
+              options.topicId = topicArr[k][1];
+              break;
+            }
+            else if ( k == topicArr.length -1 ){
+              var optionsCreateT = { name: topicNameInput };              //  如果沒主題就新增
+              var newTopic = Classroom.Courses.Topics.create(optionsCreateT, courseId);
+              options.topicId = newTopic.topicId;
+            }
+          }
+        }
+        else { 
+          var optionsCreateT = { name: topicNameInput };
+          var newTopic = Classroom.Courses.Topics.create(optionsCreateT, courseId);
+          options.topicId = newTopic.topicId;      
+        }
+      }
+    
+    var logTextRC = JSON.stringify( options, null, 2);
+    var cw = Classroom.Courses.CourseWork.create(options, courseId);  
+
+  } catch(e){ }
+
+    var cwId = cw.id;
+    var output = [cwId, courseId];
+    var uiEnd = SpreadsheetApp.getUi();
+    uiEnd.alert('成功！');
+    return output;
+}
+
+
+
+// ------- settingUiRC ---------- //
+
+function settingUiRC() {
+
+  var optionalArgs = {
+                    pageSize: 0,
+                    teacherId: 'me',
+                    courseStates:[ 'ACTIVE' ],
+                    };
+
+  var response = Classroom.Courses.list(optionalArgs);
+  var courses = response.courses;
+  var courseIds = [];
+  var countC = 0;
+
+  for ( var m = 0; m < courses.length; m++ ){
+    var temp = countC + 1;                        //  把編號變成 1 開頭，不影響後續
+    var serial = temp.toString();
+    courseIds[countC] = [serial, courses[m].name, courses[m].id ];
+    countC++;
+  }
+
+  var message = '';
+  for ( var t = 0; t < courseIds.length; t++ ){
+    var tempText = courseIds[t][0] + ' - ' +courseIds[t][1] + '\n';
+    message = message.concat(tempText);
+  }
+  var example = '\n請填入欲發佈課程的序號、「1.公開」或「2.草稿」、節數、上課後幾分鐘內截止。\n（例：輸入「5 1 7 3」即為序號 5 之課程，直接公開發佈，第七節，上課後 3分鐘後截止。）\n\n\n'
+  message = example + message;
+
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt('手動發佈點名作業', message, ui.ButtonSet.OK_CANCEL );
+  if ( response.getSelectedButton() == ui.Button.OK ){
+    var temp_rText = response.getResponseText();
+    var rText = temp_rText.split(' ');
+    var selected = '';
+    var courseId = '';
+    for (var chk = 0; chk < courseIds.length; chk++){
+      if ( courseIds[chk][0] == rText[0] ){
+        selected = courseIds[chk][1];
+        courseId = courseIds[chk][2];
+        break;
+      } 
+    }
+
+    //  發佈形式文字化
+    if ( rText[1] == 1 ){
+      var publishedStyle = '公開';
+    }
+    else if ( rText[1] == 2){
+      var publishedStyle = '草稿';
+    }
+
+    var message2 = '你選擇了：\n\n\n課程：' + selected + '\n\n發佈形式：' + publishedStyle + '\n\n節數：' + rText[2] + '\n\n分鐘：' + rText[3] + '\n\n\n（若不執行請按 ESC 鍵）';
+    ui.alert(message2);  
+    rText[4] = courseId;
+    return rText;
+  }
+  else {
+    ui.alert('取消執行');
+  }
+}
