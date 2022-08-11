@@ -1,0 +1,57 @@
+// prompt UI, return courseId of the selected course.
+
+function settingUi() {
+
+  var optionalArgs = {
+                    pageSize: 0,
+                    teacherId: 'me',
+                    courseStates:[ 'ACTIVE' ],
+                    };
+
+  var response = Classroom.Courses.list(optionalArgs);
+  var courses = response.courses;
+  var courseIds = [];
+  var countC = 0;
+
+  for ( var m = 0; m < courses.length; m++ ){
+    var temp = countC + 1;                        //  把編號變成 1 開頭，不影響後續
+    var serial = temp.toString();
+    courseIds[countC] = [serial, courses[m].name, courses[m].id ];
+    countC++;
+  }
+
+  var message = '';
+  for ( var t = 0; t < courseIds.length; t++ ){
+    var tempText = courseIds[t][0] + ' - ' +courseIds[t][1] + '\n';
+    message = message.concat(tempText);
+  }
+
+  var example = '\n請填入欲發佈課程的序號\n\n\n';
+  message = example + message;
+  message = message.concat( '' );
+
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt('作業發佈設定', message, ui.ButtonSet.OK_CANCEL );
+  if ( response.getSelectedButton() == ui.Button.OK ){
+    var rText = response.getResponseText();
+    rText.toString();
+    var selected = '';
+    var courseId = '';
+  
+    //  先求得課名（selected）, 及對照的 courseId
+    for (var chk = 0; chk < courseIds.length; chk++){
+      if ( courseIds[chk][0] == rText ){
+        selected = courseIds[chk][1];
+        courseId = courseIds[chk][2];
+        break;
+      }  
+    } 
+
+    var message2 = '你選擇了：\n\n\n課程：' + selected \n\n\n（若不執行請按 ESC 鍵）';
+    ui.alert(message2); 
+    return courseId;
+  }
+  else {
+    ui.alert('取消執行');
+  }
+}
