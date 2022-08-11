@@ -1,0 +1,22 @@
+//  Admin only.
+
+function deleteCourseAllStudents( courseId ){
+
+  var options = { 
+                  pageSize: 0,
+                  };
+  var stus = [];
+  do{ 
+  var response = Classroom.Courses.Students.list( courseId, options);
+  var students = response.students;
+  stus = stus.concat(students);
+  options.pageToken = response.nextPageToken;
+  Logger.log('stus.length = %s', stus.length);
+  } while ( options.pageToken );
+
+  Logger.log('stus = %s', stus);
+  for ( var i = 0; i < stus.length; i++ ){
+    var id = stus[i].profile.id;
+    Classroom.Courses.Students.remove(courseId, id);
+  }
+}
