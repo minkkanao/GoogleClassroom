@@ -1,0 +1,215 @@
+function stuSubmFilesGet(){
+
+  var idInfo = uiCourse();    //  [ 課程序號，公開或草稿（1/2），截止日期（none/日期格式），courseId ]
+  var courseId = idInfo[0];
+  var cwId = idInfo[1];
+  if ( cwId == null ){ return false; }   //  ui被取消則 return
+
+  var newFolderX = findIfFolderExist( '【 DLS 】');    //  無→ null；有→ folder本人
+  if ( newFolderX == null ){
+    var newFolderX = DriveApp.getRootFolder().createFolder('【 DLS 】');
+    var newFolder = newFolderX.createFolder('繳交作業捷徑（座號排序）'); 
+  }
+  else {
+    var name2 = '繳交作業捷徑（座號排序）';
+    var folders = newFolderX.getFolders();
+    while (folders.hasNext() ) {
+      var folder = folders.next();
+      if ( folder.getName() == name2 ){
+      var newFolder = folder;
+      break;
+      }
+    }
+    if ( newFolder == null ){
+      var newFolder = newFolderX.createFolder('繳交作業捷徑（座號排序）'); 
+    }
+  }
+
+  var courseName = Classroom.Courses.get(courseId).name;
+  var cwName = Classroom.Courses.CourseWork.get(courseId, cwId).title;
+
+  //  在根目錄新增一個放作業捷徑的資料夾
+  var shortcutFolder = newFolder.createFolder('【' + courseName + '】' + cwName);
+
+  var responseSubm = Classroom.Courses.CourseWork.StudentSubmissions.list(courseId, cwId);
+  var subs = responseSubm.studentSubmissions;
+
+  for ( var i = 0; i < subs.length; i++){   //  先確認學生身分、班級、座號與姓名（後續掛上檔名）
+    var attachments = subs[i].assignmentSubmission.attachments;
+    var stuId = subs[i].userId;
+    var user = Classroom.Courses.Students.get(courseId, stuId);
+    var sn = user.profile.emailAddress.substring(0,7);
+
+    var stuInfo = stuSeatAndClass(sn);    //  output = [className, seatNum, cName ];
+    
+    if ( attachments ){
+      for ( var j = 0; j < attachments.length; j++){
+        if ( attachments[j].driveFile ){
+          var id = attachments[j].driveFile.id;
+          var title = attachments[j].driveFile.title;
+          // var link = attachments[j].driveFile.alternateLink;
+
+          var shortcut = shortcutFolder.createShortcut(id);   
+          try{
+            shortcut.setName(stuInfo[0] + '_' + stuInfo[1] + '_' + stuInfo[2] + '_' + title);
+          } catch(e){
+            shortcut.setName('(學生不存在)_' + title);            
+          }
+        }
+      }
+    }
+  }
+  var shortcutUrl = shortcutFolder.getUrl();
+  var uiEnd = SpreadsheetApp.getUi();
+  var endText = '已完成！連結為：\n' + shortcutUrl+ '\n\n是否彈出頁面？';
+
+  var endRe = uiEnd.prompt('已完成！', endText, uiEnd.ButtonSet.YES_NO );
+  if ( endRe.getSelectedButton() == uiEnd.Button.YES ){
+
+    const html = `<html>
+    <head align="left">
+    即將自動彈出新視窗。若無法顯示，請確認：</br></br>
+    一、您的瀏覽器是否阻擋彈出式視窗。</br>
+    二、是否使用學校 email 登入（@kcislk.ntpc.edu.tw）。
+    </head>
+                      <script>
+                        var winRef = window.open("${shortcutUrl}");
+                      </script>
+                    </html>`; 
+
+    var htmlOutput = HtmlService.createHtmlOutput(html);
+    SpreadsheetApp.getUi().showModalDialog( htmlOutput, 'GC繳交作業捷徑（座號排序）' );  
+  }
+  else {
+    return false;
+  }
+}
+
+
+function stuSeatAndClass(sn) {
+  //  叫出 StudentList 資料
+  var sheetStu = SpreadsheetApp.openById('YOUR_STUDENTS_INFO_SPREADSHEET').getSheetByName('SHEET_NAME');
+  var valuesStu = sheetStu.getRange(2,1,sheetStu.getLastRow()-1,sheetStu.getLastColumn()).getValues();
+  
+  for ( var check = 0; check < valuesStu.length; check++){
+    if ( valuesStu[check][2].toLowerCase() == sn ){
+
+      var className = valuesStu[check][0];      //  班級
+      var seatNum   = valuesStu[check][1];    //  座號
+      var cName = valuesStu[check][3];
+      var output = [className, seatNum, cName ];
+      return output;
+    }
+  }
+}
+
+function findIfFolderExist(name) {
+  var folders = DriveApp.getRootFolder().getFolders();
+  while (folders.hasNext() ) {
+    var folder = folders.next();
+    if ( folder.getName() == name ){
+      return folder;
+    }
+  }
+}
+
+function uiCourse() {
+
+  var optionalArgs = {
+                    pageSize: 0,
+                    teacherId: 'me',
+                    courseStates:[ 'ACTIVE' ],
+                    };
+
+  var response = Classroom.Courses.list(optionalArgs);
+  var courses = response.courses;
+  var courseIds = [];
+  var countC = 0;
+
+  for ( var m = 0; m < courses.length; m++ ){
+    var temp = countC + 1;                        //  把編號變成 1 開頭，不影響後續
+    var serial = temp.toString();
+    courseIds[countC] = [serial, courses[m].name, courses[m].id ];
+    countC++;
+  }
+
+  var message = '';
+  for ( var t = 0; t < courseIds.length; t++ ){
+    var tempText = courseIds[t][0] + ' - ' +courseIds[t][1] + '\n';
+    message = message.concat(tempText);
+  }
+
+  var example = '\n請選擇課程的序號。\n\n\n';
+  message = example + message;
+
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt('學生檔案捷徑輸出', message, ui.ButtonSet.OK_CANCEL );
+  if ( response.getSelectedButton() == ui.Button.OK ){
+    var rText = response.getResponseText();
+    var selected = '';
+    var courseId = '';
+  
+    //  先求得課名（selected）, 及對照的 courseId
+    for (var chk = 0; chk < courseIds.length; chk++){
+      if ( courseIds[chk][0] == rText ){
+        selected = courseIds[chk][1];
+        courseId = courseIds[chk][2];
+        break;
+      }  
+    }
+  }
+  else {
+    ui.alert('取消執行');
+    return null;
+  }
+
+  //  選完 course，接著選 CW
+  var cwIds = [];
+  var countCW = 0;
+  var optionsCW = { pageSize: 0}
+
+  do{
+    var responseCW = Classroom.Courses.CourseWork.list(courseId);
+    var cws = responseCW.courseWork;
+
+    for ( var n = 0; n < cws.length; n++ ){
+      var tempCW = countCW + 1;                        //  把編號變成 1 開頭，不影響後續
+      var serialCW = tempCW.toString();
+      cwIds[countCW] = [serialCW, cws[n].title, cws[n].id ];
+      countCW++;
+    }
+    optionsCW.pageToken = responseCW.nextPageToken;
+  } while ( optionsCW.pageToken );
+
+
+  var messageCW = '';
+  for ( var tt = 0; tt < cwIds.length; tt++ ){
+    var tempTextCW = cwIds[tt][0] + ' - ' +cwIds[tt][1] + '\n';
+    messageCW = messageCW.concat(tempTextCW);
+  }
+
+  var exampleCW = '\n請選擇作業的序號。\n\n\n';
+  messageCW = exampleCW + messageCW;
+
+  var ui = SpreadsheetApp.getUi();
+  var responseUiCW = ui.prompt('學生檔案捷徑輸出', messageCW, ui.ButtonSet.OK_CANCEL );
+
+  if ( responseUiCW.getSelectedButton() == ui.Button.OK ){
+    var rText = responseUiCW.getResponseText();
+    var selectedCW = '';
+    var cwId = '';
+  
+    for (var chkCW = 0; chkCW < cwIds.length; chkCW++){
+      if ( cwIds[chkCW][0] == rText ){
+        selectedCW = cwIds[chkCW][1];
+        cwId = cwIds[chkCW][2];
+        var output = [courseId, cwId];
+        return output;
+      }  
+    }
+  }
+  else {
+    ui.alert('取消執行');
+    return null;
+  }
+}
