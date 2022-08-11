@@ -1,0 +1,7 @@
+function findDriveFileId() {
+  var url = 'https://docs.google.com/spreadsheets/u/1/d/1IJ1VWFkkye9ECBk9dige1N3WN4X102PRVtUDK5wYsUo/edit?usp=drive_web';
+  Logger.log( getIdFromUrl(url));
+}
+
+function getIdFromUrl(url) 
+{ return url.match(/[-\w]{25,}/); }
