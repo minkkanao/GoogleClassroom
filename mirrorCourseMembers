@@ -1,0 +1,138 @@
+//  Admin only
+
+function mirrorStuList(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var values = sheet.getRange(2,1, sheet.getLastRow() -1, sheet.getLastColumn() ).getValues();   //  [i][1]: courseId，[i][7]: 正確學生名單
+
+// -------------------------------------------- 比對：老師 ------------------------------------- //
+
+  for ( var te = 0; te < values.length; te++){
+      Logger.log('te = %s',te);
+    if ( values[te][5] == '' ){ 
+      Logger.log('第 %s 項課程無老師！', te+1);
+      continue; 
+      }
+    else if ( values[te][5].indexOf('/') > -1 ){ var teacherArr = values[te][5].split('/'); }
+    else { var teacherArr = [ values[te][5] ]; } 
+
+  var courseId = values[te][1];
+  var teachersX = Classroom.Courses.Teachers.list( courseId );
+  var teachers = teachersX.teachers;
+
+  var teacherChange = [[],[]];
+  for ( var i = 0; i < teacherArr.length; i++){
+    for ( var j = 0; j < teachers.length; j++){
+      var teacherNowName = teachers[j].profile.name.familyName;
+      if ( teacherArr[i] == teacherNowName ){
+        Logger.log('%s 老師存在！', teacherArr[i] );    //  老師存在，不用動，剔掉資料，結束迴圈
+        teachers.splice(j,1);
+        break;
+      } 
+      else if ( j == teachers.length -1 ){
+        Logger.log('課程內無 %s 老師！', teacherArr[i] );
+        teacherChange[0].push( teacherArr[i] );           //  準備加進的老師
+      }
+    }
+    var teacherDel = [];
+    for (var ca = 0; ca < teachers.length; ca++){
+      teacherDel.push( teachers[ca].profile.name.familyName );
+    }
+    teacherChange[1] = teacherDel;    // 最後 j 迴圈結束後仍沒被剔掉的老師則為不應在此班的老師
+  }
+}
+
+
+// -------------------------------------------- 比對：學生 ------------------------------------- //
+  var checkList = [];
+  for ( var i = 0; i < values.length; i++){   //  所有課程迴圈
+    var courseId = values[i][1].toString();
+    var courseName = values[i][2];
+    // Logger.log('\n進行第 %s 項課程，ID：「%s」，課名：「%s」', i+1, courseId, courseName );
+    var v2 = catchCourseStuList( courseId );
+
+    // Logger.log('i = %s', i);
+    //  先把 v1 修整成 arr
+
+    var checkv1 = values[i][7];
+    if ( checkv1 != '' ){
+    
+      v1 = checkv1.split('\n');              //  單一課程的所有正確學生名單
+      for ( var p = 0; p < v1.length; p++ ){          //  修整 v1 資料
+        v1[p] = v1[p].toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
+      }
+
+      //  開始比對！
+      var result = compare(courseId, courseName, v1,v2);
+      if ( result.length != 0 ){
+        // Logger.log('單課程result = %s', result);
+        checkList.push( result );    //  資料內容：  [ courseId, 課名, [需加入學生 arr], [需移除學生 arr] ];
+      }
+    }
+  } //  所有課程迴圈結束，全課程比對結束
+
+
+
+// -------------------------------------------- 調整名單 ------------------------------------- //
+
+  //  如果比對有出入，啟動調整程式
+  Logger.log('\n需更動總筆數 = %s\ncheckList = %s', checkList.length, checkList);
+
+  if ( checkList.length >= 1 ){
+    for ( var cr = 0; cr < checkList.length; cr++ ){
+    var courseId = checkList[cr][0];
+    var courseName = checkList[cr][1];
+    var add = checkList[cr][2];
+    var del = checkList[cr][3];
+    // Logger.log('進行名單調整：checkList 第 %s 筆，ID：「%s」，課名：「%s」', cr +1, courseId, courseName);
+    addDelStuList(courseId, courseName, add, del);
+    }
+  }
+}
+
+
+function compare(courseId, courseName, v1,v2){    //  此比較僅處理單一課程迴圈
+  var output = [];
+  var result = [[],[],[]];
+  var v2NumOri = v2.length;                       //  檢查是不是課程一開始裡面就沒學生
+  // Logger.log('v2NumOri = %s', v2NumOri);
+
+  for ( var ja = 0; ja < v1.length; ja++){     //  單一課程比對迴圈
+
+    if ( v2NumOri != 0 && v2.length != 0){                      //  有學生的話 v2 迴圈才可正常啟動
+      for (var jb = 0; jb < v2.length; jb++){
+        if ( v1[ja] == v2[jb] ){          //  如果遇到對的，存下來，把 v2 的值剔除（ v2 最後剩下的就是多出來待刪的）
+            result[0].push( v1[ja] );
+            // Logger.log('核對成功：%s',v1[ja]);
+            v2.splice(jb,1);
+            break;
+        }
+        else {
+          if ( jb == v2.length - 1 ){
+              result[1].push( v1[ja] );
+              // Logger.log('正確卻不在實況的：%s', v1[ja]);
+          }
+          continue;
+        }
+      }   //  v2 已經刪減完畢，單一課程 result 完成
+    }   
+    else if ( v2NumOri == 0 ){                //  沒學生的話，直接把 v1 添至新增名單 result[1]
+      result = [[],v1,[]];
+    }
+    else if ( v2.length == 0){                //  如果 ja 跑到較後頭，v2已被剔光了，此時第一項 if 內的 for 無法執行。於此補上補處理程式
+      result[1].push( v1[ja] );
+    }
+  }
+
+  for ( var k = 0; k < v2.length; k++ ){    //  把最後留下來的 v2 資料取出來放 result
+    result[2].push( v2[k] );
+  }
+
+  // Logger.log('課名：%s\n核對成功／原資料 = %s／%s；　　　　需加上 %s 筆；　　　　需刪除 %s 筆。', 
+  //             courseName, result[0].length.toFixed(0), v1.length.toFixed(0), result[1].length.toFixed(0), result[2].length.toFixed(0));
+
+  if ( result[0].length != v1.length ){
+    output = [ courseId, courseName, result[1], result[2] ];    //  如果名單完全正確，輸出的 output = []
+  }
+  return output;    //  資料內容：  output = [ courseId, 課名, [需加入學生 arr], [需移除學生 arr] ];
+}
