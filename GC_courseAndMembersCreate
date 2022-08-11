@@ -1,0 +1,188 @@
+//  Admin only
+
+//  createCourse    ：初始開課、灌教師與學生名單
+//  createCourse2   ：後續增減學生
+
+function createCourse() {
+ 
+  var ss = SpreadsheetApp.openById('SPREADSHEET_ID');
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  var values = sheet.getRange(2,1,lastRow-1,lastColumn).getValues();
+
+//  row[0]: titles
+//  values[i][0]: checkbox
+//  values[i][1]: generated courseId
+//  values[i][2]: courseName
+//  values[i][3]: section
+//  values[i][4]: room
+//  values[i][5]: teacherArr
+//  values[i][6]: managerMail
+//  values[i][7]: studentsArr
+
+  var count = 0;
+
+  for ( var i = 0; i < values.length; i++ ){
+    if ( values[i][0] == true && values[i][1] == '' ){                  //  有勾選且無 courseId 產生的項目才執行
+      count++;
+      var start = Date.parse( new Date() );
+
+      var courseName = values[i][2];
+      var section = values[i][3];
+      var room = values[i][4];
+      var teacherArr = values[i][5].split('/');
+      var daaMail = values[i][6];
+      var stuArr = values[i][7].split('\n');
+      Logger.log('正在配置第 %s 項課程：「%s」......', count, courseName);
+
+      //  先做出老師mail Arr
+      for ( var j = 0; j < teacherArr.length; j++ ){
+        teacherArr[j] = teacherNameToMail(teacherArr[j]);
+      }
+      teacherArr.push( daaMail );
+
+      for (var k = 0; k < stuArr.length; k++ ){
+        stuArr[k] = stuArr[k].concat('@stu.kcislk.ntpc.edu.tw');
+      }
+
+      //  先開出課程，再掛入老師及學生
+      var options = {
+                        name: courseName,
+                        section: section,
+                        room: room,
+                        ownerId: ownerId,
+                        courseState: 'ACTIVE'
+                    };
+
+      var course = Classroom.Courses.create(options);
+      var courseId = course.id;
+      Logger.log('第 %s 項課程與 ID 已產生，進行教師與學生配置......', count);
+
+      //  掛老師
+      for ( var l = 0; l < teacherArr.length; l++ ){
+        try{
+          Classroom.Courses.Teachers.create({userId: teacherArr[l] }, courseId);
+        } catch(e){ continue; }
+      }
+
+      //  掛學生
+      for ( var m = 0; m < stuArr.length; m++ ){
+        try{
+          Classroom.Courses.Students.create({userId: stuArr[m] }, courseId);
+        } catch(e){ continue; }
+      }
+
+      //  把老師 patch 為 owner（學生首頁的課程上才會有老師名字），預設把首位老師設為 owner
+      var options = { ownerId: teacherArr[0] };
+      var mask = { 'updateMask': ['ownerId']  };
+      Classroom.Courses.patch(options, courseId, mask);
+
+      sheet.getRange(i+2, 2).setValue( courseId );
+      sheet.getRange(i+2, 1).setValue( false );      
+      Logger.log('第 %s 項課程已完成教師與學生配置。', count);
+
+      var end = Date.parse( new Date() );
+      var second = Math.floor( (end-start)/1000 );    //  共花費幾秒（不整除捨去）
+      var takeMinute = Math.floor( second/60 ).toFixed(0);
+      var takeSecond = Math.floor( second - takeMinute*60  ).toFixed(0);
+      Logger.log('本項花費 %s 分 %s 秒。', takeMinute, takeSecond );
+    }
+  }
+}
+
+function createCourse2() {     //  後續增減老師學生帳號
+
+  var ss = SpreadsheetApp.openById('SPREADSHEET_ID');
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  var values = sheet.getRange(2,1,lastRow-1,lastColumn).getValues();
+
+  for ( var i = 0; i < values.length; i++ ){
+    if ( values[i][0] == true ){
+      var start = Date.parse( new Date() );
+      var courseName = values[i][1];
+      var courseId = values[i][2];
+      var teacherArr = values[i][6].split('/');
+      var stuAddArr = values[i][8].split(',');
+      var stuDelArr = values[i][9].split(',');
+
+      //  先做出老師mail Arr
+      for ( var j = 0; j < teacherArr.length; j++ ){
+        teacherArr[j] = teacherNameToMail(teacherArr[j]);
+      }
+      //  學生資料整理
+      for (var k = 0; k < stuAddArr.length; k++ ){
+        stuAddArr[k] = stuAddArr[k].concat('@stu.kcislk.ntpc.edu.tw');
+      }
+      for (var k = 0; k < stuDelArr.length; k++ ){
+        stuDelArr[k] = stuDelArr[k].concat('@stu.kcislk.ntpc.edu.tw');
+      }
+
+      Logger.log('第 %s 行課程進行教師與學生配置......', i+2);
+
+      //  掛老師
+      for ( var l = 0; l < teacherArr.length; l++ ){
+        try{
+          Classroom.Courses.Teachers.create({userId: teacherArr[l] }, courseId);
+        } catch(e){ continue; }
+      }
+
+      //  掛學生
+      for ( var m = 0; m < stuAddArr.length; m++ ){
+        try{
+          Classroom.Courses.Students.create({userId: stuAddArr[m] }, courseId);
+        } catch(e){ continue; }
+      }
+
+      //  刪學生
+      for ( var m = 0; m < stuDelArr.length; m++ ){
+        try{
+          Classroom.Courses.Students.remove( courseId, stuDelArr[m] );
+        } catch(e){ continue; }
+      }
+
+      sheet.getRange(i+2, 11).setValue( courseId );   
+      Logger.log('第 %s 行課程「%s」已完成教師與學生配置。', i+2, courseName);
+ 
+      var end = Date.parse( new Date() );
+      var second = Math.floor( (end-start)/1000 );    //  共花費幾秒（不整除捨去）
+      var takeMinute = Math.floor( second/60 ).toFixed(0);
+      var takeSecond = Math.floor( second - takeMinute*60  ).toFixed(0);
+      Logger.log('本項花費 %s 分 %s 秒。', takeMinute, takeSecond );
+    }
+  }
+}
+
+
+
+//  Admin only
+
+function addDelStuList(courseId, courseName, add, del) {    //   [ courseId, courseName, add Students Array, del Students Array ];
+  for ( var i = 0; i < add.length; i++ ){
+    var stuA = add[i];
+    try {
+      Classroom.Courses.Students.create( {userId: stuA }, courseId );
+    }
+    catch(e)
+      Logger.log('\nID: %s\nNAME: %s\nstuA = %s', courseId, courseName, stuA);
+      continue;
+    }
+  }
+  for ( var j = 0; j < del.length; j++ ){
+    var stuD = del[j];
+    try {
+      Classroom.Courses.Students.remove( {userId: stuD }, courseId );
+    }
+    catch(e){
+      Logger.log('\nID: %s\nNAME: %s\nstuA = %s', courseId, courseName, stuD);
+      continue;
+    }
+  }
+}
+
+
+//   Admin only
+
+
