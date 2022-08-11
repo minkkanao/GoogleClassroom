@@ -1,0 +1,27 @@
+function deleteCourseWorkAndTopic( courseId ){
+
+  var cwmsT = Classroom.Courses.CourseWorkMaterials.list( courseId );
+  var cwms = cwmsT.courseWorkMaterial;
+  var cwsT = Classroom.Courses.CourseWork.list( courseId );
+  var cws = cwsT.courseWork;
+  var topicsT = Classroom.Courses.Topics.list(courseId);
+  var topics = topicsT.topic;
+  if ( cwms ){
+    for ( var i = 0; i < cwms.length; i++){
+      var id = cwms[i].id;
+      Classroom.Courses.CourseWorkMaterials.remove(courseId, id);
+    }
+  }  
+  if ( cws ){
+    for ( var i = 0; i < cws.length; i++){
+      var id = cws[i].id;
+      Classroom.Courses.CourseWork.remove(courseId, id);
+    }
+  }
+  if ( topics ){
+    for ( var i = 0; i < topics.length; i++){
+      var id = topics[i].topicId;
+      Classroom.Courses.Topics.remove(courseId, id);
+    }
+  }
+}
