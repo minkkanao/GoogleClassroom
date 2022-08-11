@@ -1,0 +1,251 @@
+const ui = SpreadsheetApp.getUi();
+var information = { link: '',
+                    testStu: { mail: 'STUDENT_TEST_ACCOUNT_MAIL',
+                               password: 'PASSWORD'
+                              }
+                    };
+
+function checkTestCourseInfo() {
+  var user = Session.getActiveUser().getEmail();
+  var sheetCheck = SpreadsheetApp.openById('THE_SPREADSHEET_USED_TO_CHECK_IF_TESTCOURSE_EXISTED').getSheetByName('SHEET_NAME');
+  var lastRow = sheetCheck.getLastRow();
+  var lastColumn = sheetCheck.getLastColumn();
+
+  if ( lastRow == 0 ){    //  表單空資料，回報無需刪除
+    ui.alert('無測試課程。');
+  }
+  else {
+    var values = sheetCheck.getRange(1,1,lastRow, lastColumn).getValues();
+    for ( var i = 0; i < values.length; i++){
+      if ( values[i][1] == user ){              //  有課程，取得 link
+        information.link = values[i][4];
+        ui.alert('測試課程連結：\n' + information.link + '\n\n測試用學生帳號： ' + information.testStu.mail + '\n\n測試用學生密碼： ' + information.testStu.password );
+      }
+      else if ( i == values.length -1 ){
+        ui.alert('無測試課程。');
+      }
+    }
+  }
+}
+
+function deleteTestCourse() {
+  //  確認是否已有創建過測試課程，如果無，回傳無需刪除；
+  //  如果有，回傳 courseId 進行刪除，並移除該行記錄。
+
+  var user = Session.getActiveUser().getEmail();
+  var sheetCheck = SpreadsheetApp.openById('THE_SPREADSHEET_USED_TO_CHECK_IF_TESTCOURSE_EXISTED').getSheetByName('SHEET_NAME');
+  var lastRow = sheetCheck.getLastRow();
+  var lastColumn = sheetCheck.getLastColumn();
+
+  if ( lastRow == 0 ){    //  表單空資料，回報無需刪除
+    Logger.log('空資料，無需刪除。');
+    ui.alert('空資料，無需刪除。');
+  }
+  else {
+    var values = sheetCheck.getRange(1,1,lastRow, lastColumn).getValues();
+    for ( var i = 0; i < values.length; i++){
+      if ( values[i][1] == user ){              //  有課程，開始取得 courseId
+        var courseId = values[i][3];
+        Logger.log('courseId = %s', courseId);
+        var optionsP = { courseState: 'ARCHIVED' };
+        var mask = {'updateMask': ['courseState' ]};
+        Classroom.Courses.patch( optionsP, courseId, mask);
+        Classroom.Courses.remove( courseId );
+        sheetCheck.getRange(i+1,2).setValue( '(x) ' + user );
+        sheetCheck.getRange(i+1,6).setValue( 'DELETED' );
+        Logger.log('已完成！');
+        ui.alert('已完成！');
+        break;
+      }
+      else if ( i == values.length -1 ){
+        ui.alert('掃描完畢。無課程資料，無需刪除。');
+      }
+    }
+  }
+}
+
+
+function createTestCourse() {
+
+  var user = Session.getActiveUser().getEmail();
+  var sheetCheck = SpreadsheetApp.openById('THE_SPREADSHEET_USED_TO_CHECK_IF_TESTCOURSE_EXISTED').getSheetByName('SHEET_NAME');
+
+  //  確認是否已有創立過測試課程，如果無，創立；如果有，則回報已創立的課程連結。
+  var lastRow = sheetCheck.getLastRow();
+  var lastColumn = sheetCheck.getLastColumn();
+  var values = sheetCheck.getRange(1,1,lastRow, lastColumn).getValues();
+
+  if ( lastRow == 0 ){    //  表單空資料，進行創建
+        Logger.log('掃描完畢，進行創建...（lastRow = 0）');
+
+        var options = {
+                        "name": '「DLS_作業管理員」測試課程',
+                        "section": '外部註解行',
+                        "descriptionHeading": 'TestCourseForUser',
+                        "description": '課程內大圖的 i 內，前有「教室」標題下一行',
+                        "room": '課程內大圖的 i 內，前有「教室」標題',
+                        "ownerId": 'me',
+                        "courseState": 'ACTIVE',
+                        "guardiansEnabled": true
+                      } //  options end
+
+        var responseC = Classroom.Courses.create( options );
+        var courseId = responseC.id;
+
+        var optionsP = { description: courseId };
+        var mask = {'updateMask': ['description' ]};
+        Classroom.Courses.patch( optionsP, courseId, mask);                       //  直接把 courseId patch 到 description 上
+
+        var now = new Date();
+        var ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        var link = responseC.alternateLink;
+        var outputArrC = [now, user, ssId, courseId, link];
+        sheetCheck.appendRow( outputArrC );        
+
+        //  傳送嵌入假學生的需求
+        var sheetBedFakeStu = SpreadsheetApp.openById('BedFakeStu_SPREADSHEET').getSheetByName('SHEET_NAME');
+        var now = new Date();
+        var link = responseC.alternateLink;
+        var outputArrB = [now, user, ssId, courseId, link];
+        sheetBedFakeStu.appendRow( outputArrB );
+        ui.alert('測試課程創立完成！\n課程連結：\n' + link + '\n\n`測試用學生帳號／密碼為：\nTEST_STUDENT_ACCOUNT\nPASSWORD');
+  }
+  else {
+    for ( var i = 0; i < values.length; i++){
+      if ( values[i][1] == user ){
+        ui.alert('已存在測試課程！');
+        break;
+      }
+      else if ( i == values.length -1 ){
+        var options = {
+                        "name": '「DLS_作業管理員」測試課程',
+                        "section": '外部註解行',
+                        "descriptionHeading": 'TestCourseForUser',
+                        "description": '課程內大圖的 i 內，前有「教室」標題下一行',
+                        "room": '課程內大圖的 i 內，前有「教室」標題',
+                        "ownerId": 'me',
+                        "courseState": 'ACTIVE',
+                        "guardiansEnabled": true
+                      } //  options end
+
+      var responseC = Classroom.Courses.create( options );
+      var courseId = responseC.id;
+      var optionsP = { description: courseId };
+      var mask = {'updateMask': ['description' ]};
+      Classroom.Courses.patch( optionsP, courseId, mask);                       //  直接把 courseId patch 到 description 上
+
+      Logger.log( 'courseId = %s\n%s', courseId, responseC.alternateLink );
+
+      var now = new Date();
+      var ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+      var link = responseC.alternateLink;
+      var outputArrC = [now, user, ssId, courseId, link];
+      sheetCheck.appendRow( outputArrC );        
+
+      //  傳送嵌入假學生的需求
+      var formId = 'GOOGLE_FORMS';    //  GOOGLE FORMS -> put data to sheet -> Trigger (Admin's) Function to set students in Classroom.
+
+      var form = FormApp.openById(formId);
+      var response = form.createResponse();       //  在表單上開啟一個回應（框架）
+
+      var items = form.getItems();                //  從表單得到各項目
+      var trueResponse = [ssId, courseId, link];  //  設定想植入的答案
+      var itemResponses = [];
+
+      for ( var i = 0; i < items.length; i++ ){
+        itemResponses[i] = items[i].asTextItem().createResponse( trueResponse[i] );
+        response.withItemResponse(itemResponses[i]);    //  把回應掛上植入的答案
+      }
+      response.submit();
+      ui.alert('測試課程創立完成！\n課程連結：\n' + link + '\n\n測試用學生帳號／密碼為：\ntx00000@stu.kcislk.ntpc.edu.tw\nstudenttest');
+      break;
+      } //  創建完畢
+    }
+  }   //  else end
+}
+
+
+function removeAllTestCourses() {
+  var options = { pageSize: 30  };
+  var response = Classroom.Courses.list( options );
+  var courses = response.courses;
+
+  for ( var i = 0; i < courses.length; i++ ){
+    if ( courses[i].descriptionHeading == 'TestCourseForUser' ){
+      Logger.log('i = %s, dH = %s', i, courses[i].descriptionHeading);
+      var name = courses[i].name;
+      var courseId = courses[i].id;
+      Logger.log('課名 = %s, courseId = %s', name, courseId );
+
+      var optionsP = { courseState: 'ARCHIVED' };
+      var mask = {'updateMask': ['courseState' ]};
+      Classroom.Courses.patch( optionsP, courseId, mask);
+      Classroom.Courses.remove(courseId);    
+    }
+  }
+}
+
+// function removeCourse() {
+//   var options = { pageSize: 30,
+//                   courseStates: ['ARCHIVED'] }
+//   var response = Classroom.Courses.list( options );
+//   var courses = response.courses;
+//   for ( var i = 0; i < courses.length; i++ ){
+//     var name = courses[i].name;
+//     var courseId = courses[i].id;
+//     Logger.log('課名 = %s, ID = %s', name, id );
+
+//     Classroom.Courses.remove(courseId);
+//   }
+// }
+
+function deleteCourseWorkAndTopic(){
+  //  取得測試課程 courseId
+  var user = Session.getActiveUser().getEmail();
+  var sheetCheck = SpreadsheetApp.openById('THE_SPREADSHEET_USED_TO_CHECK_IF_TESTCOURSE_EXISTED').getSheetByName('SHEET_NAME');
+  var lastRow = sheetCheck.getLastRow();
+  var lastColumn = sheetCheck.getLastColumn();
+
+  if ( lastRow == 0 ){    //  表單空資料
+    ui.alert('無測試課程，停止執行。');
+  }
+  else {
+    var values = sheetCheck.getRange(1,1,lastRow, lastColumn).getValues();
+    for ( var i = 0; i < values.length; i++){
+      if ( values[i][1] == user ){             //  有課程，開始取得 courseId
+        var courseId = values[i][3];
+
+        //  主程式碼
+        var cwmsT = Classroom.Courses.CourseWorkMaterials.list( courseId );
+        var cwms = cwmsT.courseWorkMaterial;
+        var cwsT = Classroom.Courses.CourseWork.list( courseId );
+        var cws = cwsT.courseWork;
+        var topicsT = Classroom.Courses.Topics.list(courseId);
+        var topics = topicsT.topic;
+        if ( cwms ){
+          for ( var i = 0; i < cwms.length; i++){
+            var id = cwms[i].id;
+            Classroom.Courses.CourseWorkMaterials.remove(courseId, id);
+          }
+        }  
+        if ( cws ){
+          for ( var i = 0; i < cws.length; i++){
+            var id = cws[i].id;
+            Classroom.Courses.CourseWork.remove(courseId, id);
+          }
+        }
+        if ( topics ){
+          for ( var i = 0; i < topics.length; i++){
+            var id = topics[i].topicId;
+            Classroom.Courses.Topics.remove(courseId, id);
+          }
+        }
+        break;
+      }
+    }
+    Logger.log('已完成！');
+    ui.alert('已完成！');
+  }
+}
+
+
