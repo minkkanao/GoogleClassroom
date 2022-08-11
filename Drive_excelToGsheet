@@ -1,0 +1,25 @@
+function excelToGSheet(){
+  var excel = DriveApp.getFileById('DRIVE_FILE_ID(uploaded excel)');
+  var blob = excel.getBlob();
+
+  var config = {
+    title: "[Google Sheets] " + excel.getName(),
+    parents: [{id: 'PARENTS_ID'}],
+    mimeType: MimeType.GOOGLE_SHEETS
+  };
+  var spreadsheet = Drive.Files.insert(config, blob);
+  var id = spreadsheet.id;
+  var url = SpreadsheetApp.openById(id).getUrl();
+}
+
+function testFolder(){
+
+  const folderId = '';
+  var mainFolder = DriveApp.getFolderById(folderId);
+  var folders = mainFolder.getFolders();
+
+  while ( folders.hasNext() ){
+    var folder = folders.next();
+    Logger.log( folder);
+  }
+}
