@@ -1,0 +1,360 @@
+function listGrade() {
+
+  var courseList = settingUiGR();   //  use UI function to get courseName and courseId
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();    //  for macros
+
+  for ( var cL = 0; cL < courseList.length; cL++ ){
+    var courseId = courseList[cL][2];
+    var courseName = courseList[cL][1];
+
+    //  If it has old course info sheet, delete old one before the new one creates.
+    var sheets = spreadsheet.getSheets();
+    for ( var shN = 0; shN < sheets.length; shN++ ){
+      if ( sheets[shN].getName() == courseName ){
+        spreadsheet.deleteSheet( sheets[shN] );
+        break;
+      }
+    }
+
+    var sheetNew = spreadsheet.insertSheet();       //  create new one
+    sheetNew.setName(courseName);
+
+    var cwAll = [];
+    var optionsCW =  {pageSize: 0};
+    do{
+      var responseCW = Classroom.Courses.CourseWork.list( courseId );
+      var cws = responseCW.courseWork;
+      cwAll = cwAll.concat( cws );
+      optionsCW.pageToken = responseCW.nextPageToken;
+    } while ( optionsCW.pageToken );
+
+    //  製作一個依照作業建立日期進行排序的作業識別陣列 [0]編碼 [1]作業識別（id或名稱）
+    cwAll.sort(function(a, b){                    //  sort 完的作業陣列即為依日期早至晚排序的作業陣列（index可作為順序參考）
+      var timeA = Date.parse(a.creationTime);
+      var timeB = Date.parse(b.creationTime);
+      return timeA - timeB;
+    })
+
+    //  依單一作業叫出學生submission資料，將資料依userId排序
+    var allGrade = [];
+    for ( var i = 0; i < cwAll.length; i++){            //  作業迴圈
+      allGrade[i] = [];
+      var cwId = cwAll[i].id;
+      var stsuAll = [];
+      var optionsSTSU =  {pageSize: 0};
+      do{
+        var responseSTSU = Classroom.Courses.CourseWork.StudentSubmissions.list( courseId, cwId);
+        var stsus = responseSTSU.studentSubmissions;
+        stsuAll = stsuAll.concat(stsus);
+        optionsSTSU.pageToken = responseSTSU.nextPageToken;
+      } while ( optionsSTSU.pageToken );
+
+      stsuAll.sort(function(a, b){                    //  sort 完的作業陣列即為依日期早至晚排序的作業陣列（index可作為順序參考）
+        var userIdA = a.userId;
+        var userIdB = b.userId;
+        return userIdA - userIdB;
+      })
+
+      allGrade[i].push(cwAll[i].title);         //  設定作業標題到最前頭
+
+      for ( var ss = 0; ss < stsuAll.length; ss++){
+        if ( stsuAll[ss].draftGrade != null){
+          var grade = stsuAll[ss].draftGrade;
+        }
+        else if (stsuAll[ss].assignedGrade != null){
+          var grade = stsuAll[ss].assignedGrade;
+        }
+        else if (true){
+          var grade = '╳';
+        }
+        // Logger.log('grade = %s, draft = %s, assigned = %s', grade, stsuAll[ss].draftGrade, stsuAll[ss].assignedGrade);
+        allGrade[i].push(grade);
+      }
+    }   //  作業迴圈結束
+    //  轉置陣列
+    var allGradeR = allGrade[0].map(function(col, i) {
+      return allGrade.map(function(row) {
+        return row[i];
+      })
+    });
+
+    //  再來處理學生名單，用concat 把學生資料和成績掛上（兩者的排序都是依 userId，要注意一下新轉生進來時，舊作業的排序會不會被跳過或多推一個編號
+
+    var stuIds = []; 
+    var optionsStu = {pageSize: 0};  
+    var stuData = [];
+
+    do{
+      var responseStu = Classroom.Courses.Students.list( courseId, optionsStu);
+      var stuIdsX = responseStu.students;
+      stuIds = stuIds.concat(stuIdsX);
+      optionsStu.pageToken = responseStu.nextPageToken;
+      Logger.log('stuIds.length = %s', stuIds.length);
+    } while ( optionsStu.pageToken );
+    Logger.log('已完成stuIds收集。');
+    stuIds.sort(function(a, b){
+      var userIdA = a.userId;
+      var userIdB = b.userId;
+      return userIdA - userIdB;
+    })
+
+    for ( var b = 0; b < stuIds.length; b++){
+      Logger.log('b = %s', b);
+      var mailStu = stuIds[b].profile.emailAddress;
+      var singleData = snToStuData(mailStu);    //  output: 班級，座號，學號，姓名，照片，英文名字
+      if ( singleData == null ){
+        singleData = ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ];
+      }
+      singleData.splice(5, singleData.length-5);
+    Logger.log('singleData = %s', singleData);
+      stuData[b] = singleData;
+    }
+    //  .unshift(...x)
+    var emptyArr = ['／', '／', '／', '／', '／'];
+    allGradeR[0] = emptyArr.concat( allGradeR[0] );
+    for ( var c = 1; c < allGradeR.length; c++ ){
+      allGradeR[c] = stuData[c-1].concat(allGradeR[c]);
+    }
+    sheetNew.getRange(1,1, allGradeR.length, allGradeR[0].length).setValues(allGradeR);
+
+    sheetNew.getRange(1, 1, sheetNew.getMaxRows(), sheetNew.getMaxColumns()).activate();
+    sheetNew = spreadsheet.getActiveSheet();
+    sheetNew.getRange(1, 1, sheetNew.getMaxRows(), sheetNew.getMaxColumns()).createFilter();
+    spreadsheet.getRange('A1').activate();
+    spreadsheet.getActiveSheet().getFilter().sort(1, true);
+    spreadsheet.getRange('B1').activate();
+    spreadsheet.getActiveSheet().getFilter().sort(2, true);
+    spreadsheet.getActiveSheet().getFilter().remove();
+
+    //  排完後，新增勾選控制列
+    sheetNew.insertRowBefore(1);
+
+    sheetNew.getRange(1,1).setValue( courseName );
+    sheetNew.getRange(1,2).setValue( courseId );
+    sheetNew.getRange(1,4).setValue('全選');
+    sheetNew.getRange(1,5,1,sheetNew.getLastColumn()-4).insertCheckboxes();
+    styleGradeBook();
+  }
+}
+
+
+
+// ---------------- pasteGrade () ------------- //
+
+
+function pasteGrade() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var courseId = sheet.getRange(1,2).getValue();
+  var values = sheet.getRange(3,1,sheet.getLastRow()-2,sheet.getLastColumn()).getValues();
+
+  //  先取作業名
+  var rangeSelectAllButton = sheet.getRange(1,5);
+  var selectAllButton = rangeSelectAllButton.getValue();   //  是否全部作業進行上傳
+
+  //  整理出勾選要輸出的作業
+  var rangeCheckBox = sheet.getRange(1,6,2,sheet.getLastColumn()-5);
+  var valuesTitleX = rangeCheckBox.getValues();
+  var valuesTitle = [];
+  if ( selectAllButton ){
+    valuesTitle = valuesTitleX[1];
+  }
+  else if ( !selectAllButton ){
+    for ( var ch = 0; ch < valuesTitleX[1].length; ch++){
+      if ( valuesTitleX[0][ch] == true ){
+        valuesTitle.push( valuesTitleX[1][ch] );
+      }
+      else {
+        valuesTitle.push( '╳' );        
+      }
+    }
+  }
+
+  var cwAll = [];                     //  遍歷所有作業，目標是取得 cwId
+  var optionsCW =  {pageSize: 0 };
+  do{
+    var responseCW = Classroom.Courses.CourseWork.list(courseId, optionsCW);
+    var cws = responseCW.courseWork;
+    cwAll = cwAll.concat( cws );
+    optionsCW.pageToken = responseCW.nextPageToken;
+  } while ( optionsCW.pageToken );
+
+  // ------------------------ 主要程式碼 ----------------------------------------- //
+
+  if ( valuesTitle.length != 0 )
+
+  for ( var i = 0; i < valuesTitle.length; i++){    //  作業標題迴圈
+    //  資料前置
+    var cwTitle = valuesTitle[i];
+    for ( var j = 0; j < cwAll.length; j++){        //  現有 GC 內作業迴圈
+
+      if ( cwTitle == cwAll[j].title ){             //  找到對應的作業 → 準備進入 submission 迴圈
+
+        var cwId = cwAll[j].id;
+        var stsus = [];
+        var optionsSTSU2 = {pageSize: 0}
+
+        do{
+        var stsuX = Classroom.Courses.CourseWork.StudentSubmissions.list(courseId, cwId);
+        stsus = stsus.concat(stsuX.studentSubmissions);
+        optionsSTSU2.pageToken = stsuX.nextPageToken;
+        } while ( optionsSTSU2.pageToken );
+
+        // Logger.log('stsus[0] = %s', JSON.stringify(stsus[0],null,2));
+
+        for ( var k = 0; k < values.length; k++){   //  試算表內要貼上去的學生迴圈
+          var sn = values[k][2];  //  UpperCase
+          var mailFromSn = sn.toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
+          Logger.log('mailFromSn = %s', mailFromSn);
+          var stuIdX = Classroom.Courses.Students.get( courseId, mailFromSn);
+          var stuId = stuIdX.userId;
+          Logger.log('stuId = %s', stuId);
+
+          for (var l = 0; l < stsus.length; l++){   //  單一作業內 submission 迴圈
+            if ( stuId == stsus[l].userId ){
+              var subId = stsus[l].id;
+              var draftGrade = values[k][i+5];
+              var dataSub = {"draftGrade": draftGrade };
+              var maskSub = {'updateMask': 'draftGrade' };
+              try {
+              Classroom.Courses.CourseWork.StudentSubmissions.patch(dataSub, courseId, cwId, subId, maskSub );
+              } catch(e){ Logger.log('patch出現錯誤！\n%s／%s', e.name, e.message)}            
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  //  清除勾選
+  sheet.getRange(1,5,1,sheet.getLastColumn()-4).setValue( false );
+}
+
+
+// ----------- settingUiGR() --------------------- //
+
+function settingUiGR() {
+
+  var optionalArgs = {
+                    pageSize: 0,
+                    teacherId: 'me',
+                    courseStates:[ 'ACTIVE' ],
+                    //  pageToken:'',
+                    };
+
+  var response = Classroom.Courses.list(optionalArgs);
+  var courses = response.courses;
+  var courseIds = [];
+  var countC = 0;
+
+  for ( var m = 0; m < courses.length; m++ ){
+    var temp = countC + 1;                        //  把編號變成 1 開頭，不影響後續
+    var serial = temp.toString();
+    courseIds[countC] = [serial, courses[m].name, courses[m].id ];
+    countC++;
+  }
+  // Logger.log('courseIds = %s', courseIds);
+
+  var message = '';
+  for ( var t = 0; t < courseIds.length; t++ ){
+    var tempText = courseIds[t][0] + ' - ' +courseIds[t][1] + '\n';
+    message = message.concat(tempText);
+  }
+
+  var example = '\n請填入想生成成績表的課程代碼。若選擇多個課程，請以半形空格隔開。\n（例：輸入「2 5 7」即進行序號第二、五、七項的成績表輸出。）\n\n\n';
+  message = example + message;
+  message = message.concat( '' );
+  Logger.log(message);
+
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt('成績表', message, ui.ButtonSet.OK_CANCEL );
+  if ( response.getSelectedButton() == ui.Button.OK ){
+    var temp_rText = response.getResponseText();
+    var rText = temp_rText.split(' ');
+  
+    //  先求得課名（selected）, 及對照的 courseId
+    var courseList = [];  //  預計：課程名稱，courseId
+    var count = 0; 
+
+    for ( var cl = 0; cl < rText.length; cl++ ){
+      for ( var chk = 0; chk < courseIds.length; chk++ ){
+        if ( rText[cl].toString() == courseIds[chk][0] ){
+          courseList[count] = courseIds[chk];
+          count++;
+          break;
+        }
+      }
+    }
+    Logger.log('courseList = %s', courseList);
+
+    var message2 = '\n';
+    for (var me = 0; me < courseList.length; me++){
+      message2 = message2 + '\n' +courseList[me][1];
+    }
+    message2 = '您選擇的課程為：\n\n' + message2 + '\n\n\n（若不執行請按 ESC 鍵）';
+    ui.alert(message2);  
+    return courseList;
+  }
+  else {
+    ui.alert('取消執行');
+  }
+}
+
+
+// ---------------- snToStuData() ---------------------- //
+
+function snToStuData(mail){
+  var sheetStuList = SpreadsheetApp.openById('STUDENT_INFO_SPREADSHEET').getSheetByName('SHEET_NAME');   // 呼叫學生名單
+  var values = sheetStuList.getRange(2,1,sheetStuList.getLastRow()-1,sheetStuList.getLastColumn()).getValues();
+
+  mail = mail.substring(0,7);
+  mail = mail.toUpperCase();
+  for ( var i = 0; i < values.length; i++){
+    if ( values[i][2] == mail ){
+      var output = values[i];
+      output[4] = '=image("STUDENT_PHOTO_URL")';
+      break;
+    }
+  }
+  Logger.log('output = %s', output);
+  return output;
+}
+
+
+// --------- styleGradeBook() --------------- //
+
+function styleGradeBook() {
+  var spreadsheet = SpreadsheetApp.getActive();
+  spreadsheet.getRangeList(['1:1', '2:2']).activate()
+  .setBackground('#666666')
+  .setFontColor('BACKGROUND')
+  .setFontSize(12);
+  spreadsheet.getActiveSheet().setRowHeight(1, 47);
+  spreadsheet.getActiveSheet().setRowHeight(2, 47);
+  spreadsheet.getActiveRangeList().setBorder(null, null, null, null, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.DASHED);
+  spreadsheet.getRange('1:2').activate();
+  spreadsheet.getActiveRangeList().setBorder(null, null, null, null, null, true, '#d9d9d9', SpreadsheetApp.BorderStyle.DASHED);
+  spreadsheet.getRange('D1:E1').activate();
+  spreadsheet.setCurrentCell(spreadsheet.getRange('E1'));
+  spreadsheet.getActiveRangeList().setBackground('#999999')
+  .setBorder(null, null, null, null, false, null);
+  spreadsheet.getRange('J6').activate();
+  spreadsheet.getActiveRangeList().setHorizontalAlignment('center').setVerticalAlignment('middle');
+
+  var sheet = spreadsheet.getActiveSheet();
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).activate();
+  spreadsheet.getActiveRangeList().setVerticalAlignment('middle');
+  spreadsheet.getRange('A1').activate();
+  spreadsheet.getActiveRangeList().setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  spreadsheet.getRange('A:E').activate();
+  spreadsheet.getActiveRangeList().setHorizontalAlignment('center');
+  spreadsheet.getRange('2:2').activate();
+  spreadsheet.getActiveRangeList().setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  spreadsheet.getRange('3:1001').activate();
+  spreadsheet.getActiveRangeList().setHorizontalAlignment('center');
+  spreadsheet.getActiveSheet().setRowHeights(3, 999, 66);
+  spreadsheet.getActiveSheet().setColumnWidth(5, 58);
+  spreadsheet.getActiveSheet().setFrozenRows(2);
+  spreadsheet.getActiveSheet().setFrozenColumns(5);
+}
+
+
