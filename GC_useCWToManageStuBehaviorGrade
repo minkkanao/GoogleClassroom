@@ -1,0 +1,561 @@
+function postBehaviorCw() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('行為表現');
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  var values = sheet.getRange(2,1, lastRow-1, lastColumn).getValues();
+
+  var cwData = [];
+  var count = 0;
+
+  for ( var i = 0; i < values.length; i++ ){
+    if ( values[i][3] == '' && values[i][4] == true ){    //  無發佈過且有勾選
+      var courseName = values[i][1];
+      var courseId = values[i][2].toString();
+
+    var topicName = '行為表現記錄';
+
+    var topic = Classroom.Courses.Topics.create( {name: topicName}, courseId, );
+    var topicId = topic.topicId;
+
+    var data1 = {
+        "courseId": courseId,      
+        "title": '參與（行為表現）',
+        "topicId": topicId,
+        "state": 'PUBLISHED',
+        "assigneeMode": 'ALL_STUDENTS',
+        "workType": 'ASSIGNMENT',
+        "submissionModificationMode": 'SUBMISSION_MODIFICATION_MODE_UNSPECIFIED',
+        "maxPoints": 100,
+        };  
+    var data2 = {
+        "courseId": courseId,      
+        "title": '秩序（行為表現）',
+        "topicId": topicId,
+        "state": 'PUBLISHED',
+        "assigneeMode": 'ALL_STUDENTS',
+        "workType": 'ASSIGNMENT',
+        "submissionModificationMode": 'SUBMISSION_MODIFICATION_MODE_UNSPECIFIED',
+        "maxPoints": 100,
+        }; 
+    var data3 = {
+        "courseId": courseId,      
+        "title": '其它（行為表現）',
+        "topicId": topicId,
+        "state": 'PUBLISHED',
+        "assigneeMode": 'ALL_STUDENTS',
+        "workType": 'ASSIGNMENT',
+        "submissionModificationMode": 'SUBMISSION_MODIFICATION_MODE_UNSPECIFIED',
+        "maxPoints": 100,
+        };  
+    var cw1 = Classroom.Courses.CourseWork.create(data1, courseId);
+    var cw2 = Classroom.Courses.CourseWork.create(data2, courseId); 
+    var cw3 = Classroom.Courses.CourseWork.create(data3, courseId);  
+
+
+    sheet.getRange(i+2, 4).setValue('已發佈');
+    sheet.getRange(i+2, 5).setValue( false );   
+    sheet.getRange(i+2, 6).setValue(cw1.id);    
+    sheet.getRange(i+2, 7).setValue(cw2.id);   
+    sheet.getRange(i+2, 8).setValue(cw3.id);  
+
+    var ids = [cw1.id, cw2.id, cw3.id];
+
+
+    for ( var j = 0; j < ids.length; j++ ){   //  掃描所有作業
+
+      var assignment = Classroom.Courses.CourseWork.StudentSubmissions.list( courseId, ids[j] );
+      var asList = assignment.studentSubmissions;
+
+      for ( var k = 0; k < asList.length; k++){
+          var draftC = 80;
+          var dataAS = { 'draftGrade': draftC };
+          var maskAS = { 'updateMask': 'draftGrade' };
+          try {
+          Classroom.Courses.CourseWork.StudentSubmissions.patch(dataAS, courseId, ids[j], asList[k].id, maskAS);
+      } catch(e){}
+
+      }
+    }
+    }
+  }
+}
+
+
+function behavior_stu(courseId) {
+
+  const stuAll = [];
+  var option = {  pageSize: 0  };
+  do{
+      Logger.log( 'option = %s', option);
+      var courses = Classroom.Courses.Students.list(courseId, option);
+      Logger.log( 'courses length = %s', courses.students.length);
+      if ( courses.students ){
+          for ( var pp = 0; pp < courses.students.length; pp++){
+            stuAll.push(courses.students[pp]);
+          }
+          option.pageToken = courses.nextPageToken;
+          Logger.log('stuAll.length = %s', stuAll.length);
+      }
+    }while(option.pageToken);
+
+  var sNs = [];
+  for ( var pr = 0; pr < stuAll.length; pr++){
+    var sn = [stuAll[pr].profile.emailAddress.substring(0,7).toUpperCase(), stuAll[pr].profile.id ];
+    sNs.push(sn);
+  }
+  sNs.sort();
+
+  var stuList = [];
+  var count = 0;
+
+  var sheetStuList = SpreadsheetApp.openById('STUDENTS_INFO_SPREADSHEET').getSheetByName('SHEET_NAME');
+  var lastRow = sheetStuList.getLastRow();
+  var lastColumn = sheetStuList.getLastColumn();
+  var valuesStu = sheetStuList.getRange(2,1,lastRow-1,lastColumn).getValues();
+  for ( var j = 0; j < sNs.length; j++ ){
+    for ( var k = 0; k < valuesStu.length; k++ ){
+      if ( sNs[j][0] == valuesStu[k][2] ){
+        stuList[j] = [];
+        stuList[j][0] = valuesStu[k][0];
+        stuList[j][1] = valuesStu[k][1];
+        stuList[j][2] = valuesStu[k][2];
+        stuList[j][3] = valuesStu[k][3];
+        stuList[j][4] = '=image("STUDENT_PHOTO_URL")';
+        stuList[j][5] = sNs[j][1];
+        count++;
+        break;
+      }
+    }
+  }
+  return stuList;
+}
+
+
+function behavior_stulist() {
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetBe = ss.getSheetByName('行為表現');
+  var lastRowBe = sheetBe.getLastRow();
+  var lastColumnBe = sheetBe.getLastColumn();
+  var values = sheetBe.getRange(2,1,lastRowBe -1, lastColumnBe).getValues();
+
+  for ( var x = 0; x < values.length; x++ ){
+    if ( values[x][8] == true ){
+      var courseId = values[x][2].toString();
+      var cwId1 = values[x][5].toString();
+      var cwId2 = values[x][6].toString();
+      var cwId3 = values[x][7].toString();
+
+      var stuList = behavior_stu(courseId);         //  班級，座號，學號，姓名，照片連結，userId
+
+      var courseInfo = Classroom.Courses.get(courseId);
+      var courseName = courseInfo.name;
+
+      var sheetSTU = ss.getSheetByName('STU');     //  複製模板，把產生的資料印到模板上
+      var sheet = sheetSTU.copyTo(ss);
+      sheet.setName( '【行為】' + courseName);
+      sheet.getRange(1,1).setValue( courseName );
+      sheet.getRange(22,27).setValue( courseId );   //  印 courseId, cwIds 在表上
+      sheet.getRange(22,28).setValue( cwId1 );
+      sheet.getRange(22,29).setValue( cwId2 );    
+      sheet.getRange(22,30).setValue( cwId3 );  
+
+      var quo = Math.floor( stuList.length /10 );
+      var rem = stuList.length %10;
+      var check = 0;
+      if ( rem > 0 ){  check = quo +1;  }
+      else { check = quo; }
+
+      var count = 0;
+
+      for ( var count = 0; count < check; count++ ){
+        for ( var i = count*10; i < stuList.length; i++ ){
+
+        try{
+          
+          sheet.getRange(count*5+2,(i-count*10)*3+1).setFormula( stuList[i][4] );
+          sheet.getRange(count*5+3,(i-count*10)*3+1).setValue( findsubm(courseId, cwId1, stuList[i][5] ) );    //  填入 sumbId
+          sheet.getRange(count*5+3,(i-count*10)*3+2).setValue( findsubm(courseId, cwId2, stuList[i][5] ) ); 
+          sheet.getRange(count*5+3,(i-count*10)*3+3).setValue( findsubm(courseId, cwId3, stuList[i][5] ) ); 
+          sheet.getRange(count*5+4,(i-count*10)*3+1).setValue( stuList[i][0] + '-' + stuList[i][1]);
+          sheet.getRange(count*5+4,(i-count*10)*3+2).setValue( stuList[i][2]);
+          sheet.getRange(count*5+4,(i-count*10)*3+3).setValue( stuList[i][3]);
+        
+        } catch(e){}
+
+          if ( i == count*10 + 9){
+          break;
+          }         
+        }   
+      }
+    sheetBe.getRange(x +2, 10).setValue('已完成');
+    sheetBe.getRange(x +2, 9).setValue( false );    
+    }
+  }
+}
+
+
+function behavior_grade() {
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var courseId = sheet.getRange(22,27).getValue();   //  取得表上 courseId, cwIds 
+  var cwId1 = sheet.getRange(22,28).getValue().toString();
+  var cwId2 = sheet.getRange(22,29).getValue().toString();    
+  var cwId3 = sheet.getRange(22,30).getValue().toString();  
+
+  var courseName = Classroom.Courses.get(courseId).name;
+  var cwId1Name = Classroom.Courses.CourseWork.get(courseId, cwId1).title;
+  var cwId2Name = Classroom.Courses.CourseWork.get(courseId, cwId2).title;
+  var cwId3Name = Classroom.Courses.CourseWork.get(courseId, cwId3).title;
+
+  var values1 = sheet.getRange(3,1,4,30).getValues();
+  var values2 = sheet.getRange(8,1,4,30).getValues();
+  var values3 = sheet.getRange(13,1,4,30).getValues();
+  var values4 = sheet.getRange(18,1,4,30).getValues();
+
+  //  第一排處理
+  for ( var i = 0; i < values1[3].length; i++ ){
+    if ( values1[3][i] != '' && i%3 == 0 ){  
+      var submId = values1[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId1, submId );
+      if ( typeof( values1[3][i] ) == 'string' && values1[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values1[3][i].replace('－','-') );
+      }
+      else { var cal = values1[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId1, submId, mask);
+                                                      //  一、收集加減值；二、收集原來的draftGrade；三、做完運算後將新成績 patch 回去
+      log(courseName, cwId1Name, values1[1][i], values1[1][i+1], values1[1][i+2], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(5,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(6,i+1).clearContent();
+    }
+
+    else if ( values1[3][i] != '' && i%3 == 1 ){
+      var submId = values1[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId2, submId );
+      if ( typeof( values1[3][i] ) == 'string' && values1[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values1[3][i].replace('－','-') );
+      }
+      else { var cal = values1[3][i] }
+      Logger.log('cal = %s, type = %s', cal, typeof(cal));
+      // var cal = parseInt( values1[3][i] );
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId2, submId, mask);
+      log(courseName, cwId2Name, values1[1][i-1], values1[1][i], values1[1][i+1], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(5,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(6,i+1).clearContent();
+    }
+
+    else if ( values1[3][i] != '' && i%3 == 2 ){
+      var submId = values1[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId3, submId );
+      if ( typeof( values1[3][i] ) == 'string' && values1[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values1[3][i].replace('－','-') );
+      }
+      else { var cal = values1[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId3, submId, mask);
+      log(courseName, cwId3Name, values1[1][i-2], values1[1][i-1], values1[1][i], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(5,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(6,i+1).clearContent();
+    }
+  }
+  Logger.log('第一排處理完畢。');
+
+  //  第二排處理
+  for ( var i = 0; i < values2[3].length; i++ ){
+    if ( values2[3][i] != '' && i%3 == 0 ){  
+      var submId = values2[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId1, submId );
+      if ( typeof( values2[3][i] ) == 'string' && values2[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values2[3][i].replace('－','-') );
+      }
+      else { var cal = values2[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId1, submId, mask);
+      log(courseName, cwId1Name, values1[1][i], values1[1][i+1], values1[1][i+2], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(10,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(11,i+1).clearContent();
+    }
+
+    else if ( values2[3][i] != '' && i%3 == 1 ){
+      var submId = values2[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId2, submId );
+
+      if ( typeof( values2[3][i] ) == 'string' && values2[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values2[3][i].replace('－','-') );
+      }
+      else { var cal = values2[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId2, submId, mask);
+      log(courseName, cwId2Name, values1[1][i-1], values1[1][i], values1[1][i+1], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(10,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(11,i+1).clearContent();
+    }
+
+    else if ( values2[3][i] != '' && i%3 == 2 ){
+      var submId = values2[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId3, submId );
+      if ( typeof( values2[3][i] ) == 'string' && values2[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values2[3][i].replace('－','-') );
+      }
+      else { var cal = values2[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId3, submId, mask);
+      log(courseName, cwId3Name, values1[1][i-2], values1[1][i-1], values1[1][i], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(10,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(11,i+1).clearContent();
+    }
+  }
+  Logger.log('第二排處理完畢。');
+
+  //  第三排處理
+  for ( var i = 0; i < values3[3].length; i++ ){
+    if ( values3[3][i] != '' && i%3 == 0 ){  
+      var submId = values3[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId1, submId );
+      if ( typeof( values3[3][i] ) == 'string' && values3[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values3[3][i].replace('－','-') );
+      }
+      else { var cal = values3[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId1, submId, mask);
+      log(courseName, cwId1Name, values1[1][i], values1[1][i+1], values1[1][i+2], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(15,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(16,i+1).clearContent();
+    }
+
+    else if ( values3[3][i] != '' && i%3 == 1 ){
+      var submId = values3[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId2, submId );
+      if ( typeof( values3[3][i] ) == 'string' && values3[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values3[3][i].replace('－','-') );
+      }
+      else { var cal = values3[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId2, submId, mask);
+      log(courseName, cwId2Name, values1[1][i-1], values1[1][i], values1[1][i+1], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(15,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(16,i+1).clearContent();
+    }
+
+    else if ( values3[3][i] != '' && i%3 == 2 ){
+      var submId = values3[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId3, submId );
+      if ( typeof( values3[3][i] ) == 'string' && values3[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values3[3][i].replace('－','-') );
+      }
+      else { var cal = values3[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId3, submId, mask);
+      log(courseName, cwId3Name, values1[1][i-2], values1[1][i-1], values1[1][i], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(15,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(16,i+1).clearContent();
+    }
+  }
+  Logger.log('第三排處理完畢。');
+
+  //  第四排處理
+  for ( var i = 0; i < values4[3].length; i++ ){
+    if ( values4[3][i] != '' && i%3 == 0 ){  
+      var submId = values4[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId1, submId );
+      if ( typeof( values4[3][i] ) == 'string' && values4[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values4[3][i].replace('－','-') );
+      }
+      else { var cal = values4[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId1, submId, mask);
+      log(courseName, cwId1Name, values1[1][i], values1[1][i+1], values1[1][i+2], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(20,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(21,i+1).clearContent();
+    }
+
+    else if ( values4[3][i] != '' && i%3 == 1 ){
+      var submId = values4[0][i];
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId2, submId );
+      if ( typeof( values4[3][i] ) == 'string' && values4[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values4[3][i].replace('－','-') );
+      }
+      else { var cal = values4[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId2, submId, mask);
+      log(courseName, cwId2Name, values1[1][i-1], values1[1][i], values1[1][i+1], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(20,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(21,i+1).clearContent();
+    }
+
+    else if ( values4[3][i] != '' && i%3 == 2 ){
+      var submId = values4[0][i];
+      Logger.log('bug確認：courseId = %s, cwId3 = %s, submId = %s', courseId, cwId3, submId);
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId3, submId );
+      if ( typeof( values4[3][i] ) == 'string' && values4[3][i].indexOf('－') != -1 ){
+        var cal = parseInt( values4[3][i].replace('－','-') );
+      }
+      else { var cal = values4[3][i] }
+      var draftGradeBefore = subm.draftGrade;
+      var draftGradeAfter =draftGradeBefore + cal;
+      var data = {  "draftGrade": draftGradeAfter  };
+      var mask = {'updateMask': 'draftGrade' };
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(data, courseId, cwId3, submId, mask);
+      log(courseName, cwId3Name, values1[1][i-2], values1[1][i-1], values1[1][i], draftGradeBefore, draftGradeAfter);
+      sheet.getRange(20,i+1).setValue( draftGradeAfter + '*');
+      sheet.getRange(21,i+1).clearContent();
+    }
+  }
+}
+
+
+
+function behavior_listnow() {
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var values1 = sheet.getRange(3,1,4,30).getValues();
+  var values2 = sheet.getRange(8,1,4,30).getValues();
+  var values3 = sheet.getRange(13,1,4,30).getValues();
+  var values4 = sheet.getRange(18,1,4,30).getValues();
+
+  var courseId = sheet.getRange(22,27).getValue().toString();
+  var cwId1 = sheet.getRange(22,28).getValue().toString();
+  var cwId2 = sheet.getRange(22,29).getValue().toString();
+  var cwId3 = sheet.getRange(22,30).getValue().toString();
+
+  //  列指定作業成績
+
+  for ( var i = 0; i < 30; i++ ){
+    if ( i%3 == 0 && values1[0][i] != ''){
+      var cwId = cwId1;
+      var submId = values1[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(5,i+1).setValue(grade);
+    }
+    if ( i%3 == 1 && values1[0][i] != ''){
+      var cwId = cwId2;
+      var submId = values1[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(5,i+1).setValue(grade);
+    }
+    if ( i%3 == 2 && values1[0][i] != '' ){
+      var cwId = cwId3;
+      var submId = values1[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(5,i+1).setValue(grade);
+    }
+  }
+
+  for ( var i = 0; i < 30; i++ ){
+    if ( i%3 == 0 && values2[0][i] != '' ){
+      var cwId = cwId1;
+      var submId = values2[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(10,i+1).setValue(grade);
+    }
+    if ( i%3 == 1 && values2[0][i] != '' ){
+      var cwId = cwId2;
+      var submId = values2[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(10,i+1).setValue(grade);
+    }
+    if ( i%3 == 2 && values2[0][i] != '' ){
+      var cwId = cwId3;
+      var submId = values2[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(10,i+1).setValue(grade);
+    }
+  }
+
+  for ( var i = 0; i < 30; i++ ){
+    Logger.log('第三排的 i = %s', i);
+    if ( i%3 == 0 && values3[0][i] != '' ){
+
+      var cwId = cwId1;
+      var submId = values3[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+
+      sheet.getRange(15,i+1).setValue(grade);
+    }
+    if ( i%3 == 1 && values3[0][i] != '' ){
+
+      var cwId = cwId2;
+      var submId = values3[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+
+      sheet.getRange(15,i+1).setValue(grade);
+    }
+    if ( i%3 == 2 && values3[0][i] != '' ){
+
+      var cwId = cwId3;
+      var submId = values3[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+
+      sheet.getRange(15,i+1).setValue(grade);
+    }
+  }
+
+  for ( var i = 0; i < 30; i++ ){
+    if ( i%3 == 0 && values4[0][i] != '' ){
+      var cwId = cwId1;
+      var submId = values4[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(20,i+1).setValue(grade);
+    }
+    if ( i%3 == 1 && values4[0][i] != '' ){
+      var cwId = cwId2;
+      var submId = values4[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(20,i+1).setValue(grade);
+    }
+    if ( i%3 == 2 && values4[0][i] != '' ){
+      var cwId = cwId3;
+      var submId = values4[0][i].toString();
+      var subm = Classroom.Courses.CourseWork.StudentSubmissions.get(courseId, cwId, submId);
+      var grade = subm.draftGrade;
+      sheet.getRange(20,i+1).setValue(grade);
+    }
+  }  
+}
