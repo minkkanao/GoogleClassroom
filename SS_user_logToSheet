@@ -1,0 +1,31 @@
+//  'state' is the description you want to note for this log data.
+
+function logFunction( state ){
+  var sheetLog = SpreadsheetApp.openById('YOUR_LOG_SPREADSHEET_ID').getSheetByName('SHEET_NAME');
+  var now = new Date();
+  var userNow = Session.getActiveUser().getEmail();
+  var sheetId = ssNow.getId();
+  var sheetUrl = ssNow.getUrl();
+  var owner = ssNow.getOwner();
+  var editors = ssNow.getEditors().join('\n');
+  var viewers = ssNow.getViewers().join('\n');
+  var row = [now, userNow, sheetId, sheetUrl, state, owner, editors, viewers ];
+  sheetLog.appendRow( row );
+}
+
+
+//  For Google Classroom CourseWork functions.
+//  Everytime the selected action runs, log data can write in the same cell.
+
+function logExe(sheet, i, courseId, cwId){
+      var now = new Date();
+      var year = now.getFullYear();
+      var month = now.getMonth() + 1;
+      var date = now.getDate();
+      var hour = now.getHours();
+      var minute = now.getMinutes();
+      var courseName = Classroom.Courses.get(courseId).name;
+      var text = sheet.getRange(i+2, 11).getValue();
+      text = text + '[' + year + '/' + month + '/' + date +'(' + hour + ':' + minute + ')] ' + courseName + '／' + courseId + '\n';
+      sheet.getRange(i+2, 11).setValue( text );
+}
