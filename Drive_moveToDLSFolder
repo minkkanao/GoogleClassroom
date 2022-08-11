@@ -1,0 +1,30 @@
+function moveToDLSFolder(){
+  var ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+
+  try{
+
+  //  產生資料夾存放相關檔案
+  var checkFolder = findIfFolderExist( '【 DLS 】');    //  無→ null；有→ id(string)
+  if ( checkFolder == null ){
+    var dlsFolder = DriveApp.getRootFolder().createFolder('【 DLS 】');
+    DriveApp.getFileById(ssId).moveTo(dlsFolder);
+  }
+  else {
+    var dlsFolder = DriveApp.getFolderById(checkFolder);
+    DriveApp.getFileById(ssId).moveTo(dlsFolder);        
+  }
+
+  } catch(e){}
+
+}
+
+
+function findIfFolderExist(name) {
+  var folders = DriveApp.getRootFolder().getFolders();
+  while (folders.hasNext() ) {
+    var folder = folders.next();
+    if ( folder.getName() == name ){
+      return folder;
+    }
+  }
+}
