@@ -1,0 +1,15 @@
+function sendToLine(LineText){
+
+  //  var lineToken = 'YOUR_LINE_TOKEN';
+
+  var token = lineToken;
+  var options =
+   {
+     "method": "post",
+     "headers" : {"Authorization" : "Bearer "+ token},
+     "payload":{
+        'message':'\n'+ LineText
+     }
+   };
+   UrlFetchApp.fetch("https://notify-api.line.me/api/notify", options);
+}
