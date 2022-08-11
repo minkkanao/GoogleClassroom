@@ -91,6 +91,11 @@ function createCourse() {
   }
 }
 
+
+
+//   Admin only
+
+
 function createCourse2() {     //  後續增減老師學生帳號
 
   var ss = SpreadsheetApp.openById('SPREADSHEET_ID');
@@ -156,6 +161,98 @@ function createCourse2() {     //  後續增減老師學生帳號
 }
 
 
+//   Admin only
+
+function createCourse2check() {     //  `（check）確認學生帳號，輸入資料需經整理，整理完後用 split(',')切開
+
+  var ss = SpreadsheetApp.openById('SPREADSHEET_NAME');
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  var values = sheet.getRange(2,1,lastRow-1,lastColumn).getValues();
+
+    for ( var i = 0; i < values.length; i++ ){
+      if ( values[i][0] == true ){
+        var start = Date.parse( new Date() );
+        var courseName = values[i][1];
+        var courseId = values[i][2];
+        if ( values[i][8] == '' ){  var stuAddArr = false; } else if( values[i][8].indexOf(',' != -1 )){  var stuAddArr = values[i][8].split(',');}
+        if ( values[i][9] == '' ){  var stuDelArr = false; } else if( values[i][9].indexOf(',' != -1 )){  var stuDelArr = values[i][9].split(',');}
+        
+        //  學生資料整理
+        for (var k = 0; k < stuAddArr.length; k++ ){
+          if ( stuAddArr[k] != '' ){
+            var tempCombine = stuAddArr[k] + 'DOMAIN';
+            stuAddArr[k] = tempCombine.toLowerCase();
+          }
+        }
+        for (var k = 0; k < stuDelArr.length; k++ ){
+          if ( stuAddArr[k] != '' ){
+            var tempCombine = stuDelArr[k] + 'DOMAIN';
+            stuDelArr[k] = tempCombine.toLowerCase();
+          }
+        }
+
+        Logger.log('第 %s 行課程「%s」進行學生比對......', i+2, courseName);
+
+        //  取得課程學生資料
+        var options = { pageSize: 0 };
+        var stus = [];
+        do{
+            var stusX = Classroom.Courses.Students.list(courseId, options);
+            stus = stus.concat( stusX.students );
+            options.pageToken = stusX.nextPageToken;
+          } while ( options.pageToken );   
+
+        //  掃：新增學生
+        for ( var m = 0; m < stuAddArr.length; m++ ){
+          if ( !stuAddArr ){ break; }
+            var mailOri = stuAddArr[m];
+            for ( var p = 0; p < stus.length; p++){
+              // Logger.log('i = %s', i );
+              var email = stus[p].profile.emailAddress;
+              if ( mailOri == email ){
+                var name = getUser(mailOri);
+                Logger.log('%s（%s）有存在，OK',name, mailOri);
+                break;
+              }
+              else if ( p == stus.length-1 ){
+                // Logger.log('mailOri = %s', mailOri);
+                var nameMissed = getUser(mailOri);
+                var course = Classroom.Courses.get(courseId);
+                var courseLink = course.alternateLink;
+                Logger.log('有誤！ %s（%s）未寫入。\n%s', nameMissed, mailOri, courseLink);
+              }
+            }
+        }
+
+        //  掃：刪除學生
+        for ( var n = 0; n < stuDelArr.length; n++ ){
+          if ( !stuDelArr ){ break; }
+            var mailOriD = stuDelArr[n];
+            for ( var q = 0; q < stus.length; q++){
+              var  emailD = stus[q].profile.emailAddress;
+              if ( emailD == mailOriD ){
+                var nameError = getUser(mailOriD);
+                var course = Classroom.Courses.get(courseId);
+                var courseLink = course.alternateLink;
+                Logger.log('有誤！ %s（%s）未移除。\n%s', nameError, mailOriD, courseLink);  
+                break;
+              }
+              if ( q == stus.length-1 ){
+                var name = getUser(mailOriD);
+                Logger.log('%s（%s）經確認已移除，OK',name, mailOriD);
+              }         
+            }
+        }   
+      }
+    }
+}
+
+
+
+
+
 
 //  Admin only
 
@@ -181,8 +278,5 @@ function addDelStuList(courseId, courseName, add, del) {    //   [ courseId, cou
     }
   }
 }
-
-
-//   Admin only
 
 
