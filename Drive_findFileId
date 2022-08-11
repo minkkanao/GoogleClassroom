@@ -1,5 +1,5 @@
 function findDriveFileId() {
-  var url = 'https://docs.google.com/spreadsheets/u/1/d/1IJ1VWFkkye9ECBk9dige1N3WN4X102PRVtUDK5wYsUo/edit?usp=drive_web';
+  var url = 'GOOGLE_FILE_URL';
   Logger.log( getIdFromUrl(url));
 }
 
