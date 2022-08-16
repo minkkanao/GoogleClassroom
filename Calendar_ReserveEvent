@@ -1,0 +1,122 @@
+var calId = 'YOUR_CALENDAR_ID';
+var appUrl = 'YOUR_WEB_APPLICATION_URL';
+
+function createEvent(){
+
+  var ss = SpreadsheetApp.openById('YOUR_CREATE_EVENT_SPREADSHEET');
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var values = sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getValues();
+
+  if ( !values ){return;}
+
+  for ( var i = 0; i < values.length; i++){
+    if ( values[i][0] == true && values[i][1] == ''){
+      var title = values[i][2];
+      var desc = values[i][3];
+      var startString = values[i][4];
+      var endString = values[i][5]; 
+
+    var cal = CalendarApp.getCalendarById(calId);
+    var start = new Date(startString);
+    var end = new Date(endString);
+    var event = cal.createEvent(title, start,end);
+    event.setAnyoneCanAddSelf(true);
+    var eId = event.getId();
+    var urlString = '\n\n' + '<a href="' + appUrl +'?eId=' + eId + '" target="_blank">點我進行工作坊預約</a>';
+    desc += urlString;
+    event.setDescription(desc);
+
+    sheet.getRange(i+2,2).setValue(eId);
+    sheet.getRange(i+2,1).setValue(false);
+    }
+  }
+}
+
+function renewSheet(){
+  var ss = SpreadsheetApp.openById('YOUR_CREATE_EVENT_SPREADSHEET');
+  var sheet = ss.getSheetByName('SHEET_NAME');
+  var values = sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getValues();
+  var cal = CalendarApp.getCalendarById(calId);
+
+  var startTime = new Date('START_TIME');
+  var endTime = new Date(END_TIME');
+  var events = cal.getEvents(startTime, endTime);
+  var eventsTime = [];
+  for ( var k = 0; k < events.length; k++){
+    eventsTime[k] = [ events[k].getId(), events[k].getStartTime(), events[k].getEndTime() ];
+  }
+
+  if ( !values ){return;}
+  for ( var i = 0; i < eventsTime.length; i++){
+    var eId = eventsTime[i][0];
+    var newST = eventsTime[i][1];
+    var newET = eventsTime[i][2];
+  
+    for ( var j = 0; j < values.length; j++){
+      if ( values[j][1] == eId ){
+        sheet.getRange(j+2,5).setValue(newST);
+        sheet.getRange(j+2,6).setValue(newET);
+        var renewText = sheet.getRange(j+2,8).getValue();
+        if ( renewText == '' ){  renewText = new Date();   }
+        else{  renewText += '\n' + new Date();    }
+        sheet.getRange(j+2,8).setValue(renewText);        
+
+        var event = cal.getEventById(eId);
+        var guests = event.getGuestList();
+        if ( guests.length ){
+          var guestText = guests[0].getEmail();
+          for ( var p = 1; p < guests.length; p++){
+            guestText += '\n' + guests[p].getEmail();
+          }
+          sheet.getRange(j+2,7).setValue(guestText);
+        }
+        break;
+      }
+    }
+  }  
+}
+
+
+function doGet(event){
+
+    var param = event.parameter;
+    var eventId = param.eId;
+    var cal = CalendarApp.getCalendarById(calId);
+    var guest = Session.getActiveUser().getEmail();
+
+    var event = cal.getEventById(eventId);
+    var eventName = event.getTitle();
+
+    var start = event.getStartTime();
+    var sMonth = start.getMonth() +1;
+    var sDate = start.getDate();
+    var sDay = start.getDay();
+    var sHour = start.getHours();
+    var sMinute = start.getMinutes();
+
+    var end = event.getEndTime();
+    var eMonth = end.getMonth() +1;
+    var eDate = end.getDate();
+    var eDay = end.getDay();
+    var eHour = end.getHours();
+    var eMinute = end.getMinutes();
+
+    var startTime = sMonth + ' / ' + sDate + '（週 ' + sDay + ' ）  ' + sHour + ':' + sMinute;
+    var endTime = eMonth + ' / ' + eDate + '（週 ' + eDay + ' ）  ' + eHour + ':' + eMinute;
+    event.addGuest(guest);
+
+
+  var url = 'https://calendar.google.com/'; 
+  const html = `<html>  <head align="left">
+
+
+  預約成功！請點下方連結至您的日曆接受邀請。</br>
+  <a href="https://calendar.google.com/" target="_blank">點我進入日曆</a></br></br>
+  工作坊名稱：${eventName}</br>
+  時間　　　：${startTime} 至</br>
+  　　　　　　${endTime}</br>
+  登記人　　：${guest}
+  </html>`;
+
+  return HtmlService.createHtmlOutput(html);
+}
