@@ -1,6 +1,6 @@
 function sendToLine(LineText){
 
-  //  var lineToken = 'YOUR_LINE_TOKEN';
+  var lineToken = 'YOUR_LINE_TOKEN';
 
   var token = lineToken;
   var options =
