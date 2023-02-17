@@ -1,0 +1,79 @@
+//  Use PageToken to get courses over 500
+
+function getAllCourses (teacherId){
+
+  var arg = { 
+    teacherId: mail,
+    courseStates: ['ACTIVE'],
+    };
+  var courses = [];
+  var coursesOut = [];
+  var countCO = 0;
+  
+  do {
+    var roster = Classroom.Courses.list(arg);
+    arg.pageToken = roster.nextPageToken;       //  make sure if next page exists?
+    var courses_ = roster.courses;
+    courses = courses.concat(courses_);
+  }
+  while ( arg.pageToken );
+  
+  return courses;
+}
+
+
+
+//  update course info
+//  https://developers.google.com/classroom/reference/rest/v1/courses
+
+function updateCourseInfo(courseId, nameNew){
+  var course = Classroom.Courses.get(courseId);
+  course.name = nameNew;
+  Classroom.Courses.update(course, courseId);
+}
+
+
+//  add/remove Teachers n' Students
+
+function addTeacher(courseId, mail){
+  Classroom.Courses.Teachers.create( {userId: mail}, courseId );
+}
+
+function removeTeacher(courseId, mail){
+  Classroom.Courses.Teachers.remove( courseId, mail );
+}
+
+function addStudent(stuId, courseId){
+  var mail = stuId.toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
+  Classroom.Courses.Students.create( {userId: mail}, courseId );
+}
+
+function removeStudent(stuId, courseId){
+  var mail = stuId.toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
+  Classroom.Courses.Students.remove( courseId, mail );
+}
+
+
+//  Use AdminDirectory API to list users
+//  https://developers.google.com/apps-script/advanced/admin-sdk-directory
+
+function listUsers(){
+  var options = {
+      customer: 'my_customer',
+      orderBy: 'email',
+      sortOrder: 'ASCENDING',
+      maxResults: 500,
+      query: "orgUnitPath='/LK-stu/PS'",
+    }
+  var users = [];
+  do {
+    var page = AdminDirectory.Users.list(options);
+    var pages = page.users;
+    users = users.concat(pages);
+    options.pageToken = page.nextPageToken;
+  } while (options.pageToken);
+
+  var output = [];
+  for ( var i in users ){  output.push( users[i].name.familyName ); }
+  return output;
+}
