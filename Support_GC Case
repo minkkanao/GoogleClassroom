@@ -43,27 +43,26 @@ function removeTeacher(courseId, mail){
   Classroom.Courses.Teachers.remove( courseId, mail );
 }
 
-function addStudent(stuId, courseId){
-  var mail = stuId.toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
-  Classroom.Courses.Students.create( {userId: mail}, courseId );
+function addStudent(stuMail, courseId){
+  Classroom.Courses.Students.create( {userId: stuMail}, courseId );
 }
 
-function removeStudent(stuId, courseId){
-  var mail = stuId.toLowerCase() + '@stu.kcislk.ntpc.edu.tw';
-  Classroom.Courses.Students.remove( courseId, mail );
+function removeStudent(stuMail, courseId){
+  Classroom.Courses.Students.remove( courseId, stuMail );
 }
 
 
 //  Use AdminDirectory API to list users
 //  https://developers.google.com/apps-script/advanced/admin-sdk-directory
 
-function listUsers(){
+function listUsers(path){
+  var path_ = "orgUnitPath='" + path + "'";
   var options = {
       customer: 'my_customer',
       orderBy: 'email',
       sortOrder: 'ASCENDING',
       maxResults: 500,
-      query: "orgUnitPath='/LK-stu/PS'",
+      query: path_,
     }
   var users = [];
   do {
