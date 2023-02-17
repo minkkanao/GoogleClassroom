@@ -7,8 +7,6 @@ function getAllCourses (teacherId){
     courseStates: ['ACTIVE'],
     };
   var courses = [];
-  var coursesOut = [];
-  var countCO = 0;
   
   do {
     var roster = Classroom.Courses.list(arg);
